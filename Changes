@@ -1,7 +1,9 @@
 Revision history for Perl extension Net::MovableType.
 
-1.72	Mon Jul 28
+1.73    Monday, July 28, 2003
+    - Net::MovableType defines 'MT' and 'MovableType' classes as aliases
+      to 'Net::MovableType' class.
+    - source of the MovableType.pm optimized.
 	- added support for newMediaObject (upload()) method.
 	- added support for reading parameters from rsd.xml file
-
 

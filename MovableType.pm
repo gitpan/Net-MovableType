@@ -1,13 +1,13 @@
 package Net::MovableType;
 
-# $Id: MovableType.pm,v 1.9 2003/07/28 09:20:36 sherzodr Exp $
+# $Id: MovableType.pm,v 1.11 2003/07/28 11:30:10 sherzodr Exp $
 
 use strict;
 use vars qw($VERSION $errstr $errcode);
 use Carp;
 use XMLRPC::Lite;
 
-$VERSION = '1.72';
+$VERSION = '1.73';
 
 # Preloaded methods go here.
 
@@ -44,6 +44,32 @@ sub new {
   
   return $self
 }
+
+
+
+
+
+# shortcut for XMLRPC::SOM's call() method. Private!
+sub _call {
+    my ($self, $method, @args) = @_;
+
+    unless ( $method ) {
+        die "_call(): usage error"
+    }
+
+    my $proxy = $self->{_proxy} or die "'_proxy' is missing";
+    my $som   = $proxy->call($method, @args);
+    my $result= $som->result();
+
+    unless ( defined $result ) {
+        $errstr = $som->faultstring;
+        $errcode= $som->faultcode;
+        return undef
+    }
+    
+    return $result
+}
+
 
 
 
@@ -192,16 +218,7 @@ sub getUsersBlogs {
         croak "username and password are missing";
     }
 
-    my $proxy   = $self->{_proxy};
-    my $som     = $proxy->call('blogger.getUsersBlogs', "", $username, $password);
-    my $result  = $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode = $som->faultcode;
-        return undef
-    }
-    return $result
+    return $self->_call('blogger.getUsersBlogs', "", $username, $password)
 }
 
 
@@ -219,17 +236,7 @@ sub getUserInfo {
         croak "username and/or password are missing"
     }
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('blogger.getUserInfo', "", $username, $password);
-    my $result= $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode= $som->faultcode;
-        return undef;
-    }
-
-    return $result
+    return $self->_call('blogger.getUserInfo', "", $username, $password)
 }
 
 
@@ -245,17 +252,7 @@ sub getPost {
         croak "getPost() usage error"
     }
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('metaWeblog.getPost', $postid, $username, $password);
-    my $result= $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode = $som->faultcode;
-        return undef
-    }
-
-    return $result
+    return $self->_call('metaWeblog.getPost', $postid, $username, $password)
 }
 
 
@@ -272,16 +269,7 @@ sub getRecentPosts {
     my $password = $self->password()   or croak "no 'password' defined";
     $numposts ||= 1;
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('metaWeblog.getRecentPosts', $blogid, $username, $password, $numposts);
-    my $result= $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode = $som->faultcode;
-        return undef
-    }
-    return $result
+    return $self->_call('metaWeblog.getRecentPosts', $blogid, $username, $password, $numposts)
 }
 
 
@@ -294,16 +282,7 @@ sub getRecentPostTitles {
     my $password= $self->password()     or croak "no 'password' defined";
     $numposts ||= 1;
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('mt.getRecentPostTitles', $blogid, $username, $password, $numposts);
-    my $result= $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode = $som->faultcode;
-        return undef
-    }
-    return $result
+    return $self->_call('mt.getRecentPostTitles', $blogid, $username, $password, $numposts)
 }
 
 
@@ -319,16 +298,7 @@ sub getCategoryList {
     $username   = $self->username($username) or croak "no 'username' defined";
     $password   = $self->password($password) or croak "no 'password' defined";
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('mt.getCategoryList', $blogid, $username, $password);
-    my $result= $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode = $som->faultcode;
-        return undef
-    }
-    return $result
+    return $self->_call('mt.getCategoryList', $blogid, $username, $password)
 }
 
 
@@ -344,16 +314,7 @@ sub getPostCategories {
         croak "getPostCategories() usage error"
     }
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('mt.getPostCategories', $postid, $username, $password);
-    my $result= $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring();
-        $errcode= $som->faultcode();
-        return undef
-    }
-    return $result
+    return $self->_call('mt.getPostCategories', $postid, $username, $password)
 }
 
 
@@ -385,16 +346,7 @@ sub setPostCategories {
     my $password  = $self->password() or croak "no 'password' defined";
     $postid                          or croak "setPostCategories() usage error";
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('mt.setPostCategories', $postid, $username, $password, $post_categories);
-    my $result= $som->result;
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode= $som->faultcode;
-        return undef
-    }
-    return $result
+    return $self->_call('mt.setPostCategories', $postid, $username, $password, $post_categories)
 }
 
 
@@ -410,16 +362,7 @@ sub setPostCategories {
 sub supportedMethods {
     my ($self) = @_;
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('mt.supportedMethods');
-    my $result= $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode= $som->faultcode;
-        return undef
-    }
-    return $result
+    return $self->_call('mt.supportedMethods')
 }
 
 
@@ -434,16 +377,7 @@ sub publishPost {
         croak "publishPost() usage error"
     }
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('mt.publishPost', $postid, $username, $password);
-    my $result= $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode= $som->faultcode;
-        return undef
-    }
-    return $result
+    return $self->_call('mt.publishPost', $postid, $username, $password)
 }
 
 
@@ -461,16 +395,7 @@ sub newPost {
         croak "newPost() usage error"
     }
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('metaWeblog.newPost', $blogid, $username, $password, $content, $publish);
-    my $result = $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode= $som->faultcode;
-        return undef
-    }
-    return $result
+    return $self->_call('metaWeblog.newPost', $blogid, $username, $password, $content, $publish)
 }
 
 
@@ -512,16 +437,7 @@ sub deletePost {
     my $password = $self->password or croak "'password' not set";
     $postid                        or croak "deletePost() usage error";
 
-    my $proxy    = $self->{_proxy};
-    my $som      = $proxy->call('blogger.deletePost', "", $postid, $username, $password, $publish);
-    my $result   = $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstr;
-        $errcode= $som->faultcode;
-        return undef
-    }
-    return $result
+    return $self->_call('blogger.deletePost', "", $postid, $username, $password, $publish)
 }
 
 
@@ -568,18 +484,7 @@ sub newMediaObject {
          type    => $type || ""
     );
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('metaWeblog.newMediaObject', 
-                    $blogid,    $username, 
-                    $password,  \%content_hash );
-    my $result = $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode= $som->faultcode;
-        return undef;
-    }
-    return $result
+    return $self->_call('metaWeblog.newMediaObject', $blogid, $username, $password, \%content_hash)
 }
 
 
@@ -606,6 +511,8 @@ package MovableType;
 @MovableType::ISA = ('Net::MovableType');
 
 
+package MT;
+@MT::ISA = ('Net::MovableType');
 
 
 1;
@@ -632,15 +539,12 @@ Net::MovableType - light-weight MovableType client
 
 =head1 DESCRIPTION
 
-I<Net::MovableType> is a light-weight, XML-RPC based client for MovableType's entry database.
-It supports all of MovableType's remote procedures.
-
 Using I<Net::MovableType> you can post new entries, edit existing entries, browse entries
 and users blogs, and perform most of the features you can perform through accessing your
 MovableType account.
 
 Since I<Net::MovableType> uses MT's I<remote procedure call> gateway, you can do it from
-any computer with an Internet connection.
+any computer with Internet connection.
 
 =head1 PROGRAMMING INTERFACE
 

@@ -15,16 +15,12 @@ SYNOPSIS
       }
 
 DESCRIPTION
-    *Net::MovableType* is a light-weight, XML-RPC based client for
-    MovableType's entry database. It supports all of MovableType's remote
-    procedures.
-
     Using *Net::MovableType* you can post new entries, edit existing
     entries, browse entries and users blogs, and perform most of the
     features you can perform through accessing your MovableType account.
 
     Since *Net::MovableType* uses MT's *remote procedure call* gateway, you
-    can do it from any computer with an Internet connection.
+    can do it from any computer with Internet connection.
 
 PROGRAMMING INTERFACE
     *Net::MovableType* promises an intuitive, user friendly, Object Oriented
@@ -394,6 +390,13 @@ TODO
 
     Manual is still not complete, more methods are left to be documented
     properly
+
+CREDITS
+    Following people have contributed to the library with their suggestions
+    and patches. The list may not be complete. Please help me with it.
+
+    Atsushi Sano
+        For rsd.xml and "newMediaObject()" support.
 
 COPYRIGHT
     Copyright (C) 2003, Sherzod B. Ruzmetov. All rights reserved.
