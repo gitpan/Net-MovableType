@@ -1,0 +1,8 @@
+Changes
+MANIFEST
+MANIFEST.SKIP
+Makefile.PL
+MovableType.pm
+README
+t/basic.t
+
