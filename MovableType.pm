@@ -1,13 +1,13 @@
 package Net::MovableType;
 
-# $Id: MovableType.pm,v 1.7 2003/07/27 12:12:36 sherzodr Exp $
+# $Id: MovableType.pm,v 1.7.2.2 2003/07/28 02:34:54 sherzodr Exp $
 
 use strict;
 use vars qw($VERSION $errstr $errcode);
 use Carp;
 use XMLRPC::Lite;
 
-($VERSION) = '$Revision: 1.7 $' =~ m/Revision:\s*(\S+)/;
+($VERSION) = '1.71';
 
 # Preloaded methods go here.
 
@@ -275,11 +275,12 @@ sub getPostCategories {
 sub setPostCategories {
     my ($self, $postid, $cats) = @_;
 
-    unless ( @$cats && $postid ) {
-        croak "setPostCategories() usage error"
-    }
     unless ( ref $cats ) {
         $cats = [$cats]
+    }
+
+    unless ( @$cats && $postid ) {
+        croak "setPostCategories() usage error"
     }
 
     my $blogid = $self->blogId()    or croak "no 'blogId' set";
