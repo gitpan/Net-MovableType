@@ -1,5 +1,8 @@
 
-What is new?
+WHAT IS NEW IN Net::MovableType
+---------------------------------------------------------------------
 
-	* added proxy() method for getting/setting proxy URL
+1.75 - Tuesday, August 24, 2004
+
+	FIX: minor bugs in newPost(), editPost() and deletePost() methods. 
 

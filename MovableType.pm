@@ -1,48 +1,57 @@
 package Net::MovableType;
 
-# MovableType.pm,v 1.18 2004/08/14 08:31:32 sherzodr Exp
+# MovableType.pm,v 1.19 2004/08/25 02:49:28 sherzodr Exp
 
 use strict;
 use vars qw($VERSION $errstr $errcode);
 use Carp;
 use XMLRPC::Lite;
 
-$VERSION = '1.74';
+$VERSION = '1.75_01';
 
 # Preloaded methods go here.
 
+
+sub _mk_boolean {
+    my $bool = shift;
+
+    return $bool if ref( $bool );
+    return SOAP::Data->type(boolean=>$bool || 0);
+}
+
+
+
 sub new {
-  my $class = shift;
-  $class = ref($class) || $class;
+    my $class = shift;
+    $class = ref($class) || $class;
 
-  my ($url, $username, $password) = @_;
+    my ($url, $username, $password) = @_;
 
-  my $self = {
-    proxy   => undef,
-    blogid   => undef,
-    username => $username,
-    password => $password
-  };
+    my $self = {
+        proxy   => undef,
+        blogid   => undef,
+        username => $username,
+        password => $password
+    };
 
-  bless $self, $class;
+    bless $self, $class;
 
-  # if $url starts with 'http://' and ends in '.xml', we assume it was a
-  # location of rsd.xml file
-  if ( $url =~ m/^http:\/\/.+\.xml$/ ) {
-      $self->rsd_url($url) or return undef;
+    # if $url starts with 'http://' and ends in '.xml', we assume it was a
+    # location of rsd.xml file
+    if ( $url =~ m/^http:\/\/.+\.xml$/ ) {
+        $self->rsd_url($url) or return undef;
 
-  # if the URL just starts with 'http://', we assume it was a url for
-  # MT's XML-RPC server
-  } elsif ( $url =~ m/^http:\/\// ) {
-      $self->{proxy} = XMLRPC::Lite->proxy($url);
+    # if the URL just starts with 'http://', we assume it was a url for
+    # MT's XML-RPC server
+    } elsif ( $url =~ m/^http:\/\// ) {
+        $self->{proxy} = XMLRPC::Lite->proxy($url);
 
-  # in neither case, we assume it was a file system location of rsd.xml file
-  } elsif ( $url ) {
-      $self->rsd_file($url) or return undef;
+    # in neither case, we assume it was a file system location of rsd.xml file
+    } elsif ( $url ) {
+        $self->rsd_file($url) or return undef;
+    }
 
-  }
-
-  return $self
+    return $self;
 }
 
 
@@ -165,12 +174,12 @@ sub errcode {
 
 
 sub password {
-  my ($self, $password) = @_;
+    my ($self, $password) = @_;
 
-  if ( defined $password ) {
-    $self->{password} = $password
-  }
-  return $self->{password}
+    if ( defined $password ) {
+        $self->{password} = $password
+    }
+    return $self->{password};
 }
 
 
@@ -420,6 +429,7 @@ sub publishPost {
 
 sub newPost {
     my ($self, $content, $publish) = @_;
+    $publish = _mk_boolean($publish);
 
     my $blogid   = $self->blogId()   or croak "'blogId' is missing";
     my $username = $self->username() or croak "'username' is not set";
@@ -439,6 +449,7 @@ sub newPost {
 
 sub editPost {
     my ($self, $postid, $content, $publish) = @_;
+    $publish = _mk_boolean($publish);
 
     my $username = $self->username() or croak "'username' is not set";
     my $password = $self->password() or croak "'password' is not set";
@@ -446,7 +457,6 @@ sub editPost {
     unless ( $content && (ref($content) eq 'HASH') ) {
         croak "newPost() usage error"
     }
-
     return $self->call('metaWeblog.editPost', $postid, $username, $password, $content, $publish)
 }
 
@@ -457,6 +467,7 @@ sub editPost {
 
 sub deletePost {
     my ($self, $postid, $publish) = @_;
+    $publish = _mk_boolean($publish);
 
     my $username = $self->username or croak "'username' not set";
     my $password = $self->password or croak "'password' not set";
@@ -868,19 +879,25 @@ Consider the following code, which uploads a F<logo.gif> file to your web site:
 Following example uploads the same file, but saves it as "my-log.gif", instead of
 "logo.gif":
 
-
     $url = $mt->upload('D:\images\logo.gif', 'my-logo.gif');
-
 
 Following example downloads a file from some remote location, using LWP::Simple,
 and uploads it to your web site with name "image.jpeg":
-
 
     use LWP::Simple;
 
     $content = get('http://some.dot.com/image.jpeg');
     $url = $mt->upload( \$content, 'image.jpeg' )
 
+B<IMPORTANT NOTE:> above I<$url> returned from C<upload()> is a hashref, holding a single key, I<url>. 
+To print the URL out:
+
+    $url = $mt->upload(\$content, 'image.jpeg');
+    printf("File has been successfully uploaded to %s\n", $url->{url};
+
+It might've been easier for me to change the behavior of C<upload()> rather than making library's new users
+accept this unintuitive usage. By doing so I could've broken all applications relying on initial syntax.
+Backward-compatibility is more important than improvements on user interface.
 
 =head1 ERROR HANDLING
 
@@ -910,7 +927,6 @@ message (not always as useful) can be retrieved through C<errcode()> static clas
 or just:
 
     $new_id = $mt->newPost($entry, 1) or die $mt->errstr;
-
 
 If you are creating your I<MovableType> object with an F<rsd.xml> file, you should also
 check the return value of C<new()>:
@@ -945,14 +961,18 @@ Manual is still not complete, more methods are left to be documented properly
 
 =head1 CREDITS
 
-Following people have contributed to the library with their suggestions and patches.
-The list may not be complete. Please help me with it.
+Following people have contributed to the library with their suggestions and patches,
+in chronological order. The list may not be complete.
 
 =over 4
 
 =item Atsushi Sano
 
 For F<rsd.xml> and C<newMediaObject()> support.
+
+=item Fredrik Acosta
+
+For fixing few bugs revealed while using Net::MovableType with WordPress.
 
 =back
 
