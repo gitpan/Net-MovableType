@@ -1,28 +1,114 @@
 package Net::MovableType;
 
-# $Id: MovableType.pm,v 1.7.2.2 2003/07/28 02:34:54 sherzodr Exp $
+# $Id: MovableType.pm,v 1.9 2003/07/28 09:20:36 sherzodr Exp $
 
 use strict;
 use vars qw($VERSION $errstr $errcode);
 use Carp;
 use XMLRPC::Lite;
 
-($VERSION) = '1.71';
+$VERSION = '1.72';
 
 # Preloaded methods go here.
 
 sub new {
   my $class = shift;
   $class = ref($class) || $class;
-  my $self = {
-    _proxy => XMLRPC::Lite->proxy($_[0]),
-    username => $_[1],
-    password => $_[2]
-  };
 
-  return bless $self, $class
+  my ($url, $username, $password) = @_;
+
+  my $self = {
+    _proxy   => undef,
+    blogid   => undef,
+    username => $username,
+    password => $password
+  };
+  
+  bless $self, $class;
+
+  # if $url starts with 'http://' and ends in '.xml', we assume it was a
+  # location of rsd.xml file
+  if ( $url =~ m/^http:\/\/.+\.xml$/ ) {
+      $self->rsd_url($url) or return undef;
+
+  # if the URL just starts with 'http://', we assume it was a url for
+  # MT's XML-RPC server
+  } elsif ( $url =~ m/^http:\/\// ) {
+      $self->{_proxy} = XMLRPC::Lite->proxy($url);
+
+  # in neither case, we assume it was a file system location of rsd.xml file
+  } elsif ( $url ) {
+      $self->rsd_file($url) or return undef;
+  
+  }
+  
+  return $self
 }
 
+
+
+sub process_rsd {
+    my ($self, $string_or_file ) = @_;
+
+    unless ( $string_or_file ) {
+        croak "process_rsd() usage error"
+    }
+
+    require XML::Simple;
+    my $xml     = XML::Simple::XMLin(ref($string_or_file) ? $$string_or_file : $string_or_file );
+    my $apilink = $xml->{service}->{apis}->{api}->{MetaWeblog}->{apiLink};
+    my $blogid  = $xml->{service}->{apis}->{api}->{MetaWeblog}->{blogID};
+
+    unless ( $apilink && $blogid ) {
+        croak "Couldn't retrieve 'apiLink' and 'blogID' from $xml"
+    }
+
+    $self->blogId($blogid);
+    $self->{_proxy} = XMLRPC::Lite->proxy($apilink);
+
+    # need to return a true value indicating success
+    return 1
+}
+
+
+# fetches RSD file from a remote location,
+# and configures Net::MovableType object properly
+sub rsd_url {
+    my ($self, $url) = @_;
+
+    unless ( $url ) {
+        croak "rsd_url() usage error"
+    }
+
+    $self->{rsd_url} = $url;
+
+    require LWP::UserAgent;
+
+    my $ua = LWP::UserAgent->new();
+    my $req= HTTP::Request->new('GET', $url);
+    my $response = $ua->request($req);
+    if ( $response->is_error ) {
+        $errstr = $response->message;
+        $errcode= $response->code;
+        return undef
+    }
+
+    return $self->process_rsd($response->content_ref)
+}
+
+
+
+sub rsd_file {
+    my ($self, $file) = @_;
+
+    unless ( $file ) {
+        croak "rsd_file() usage error"
+    }
+
+    $self->{rsd_file} = $file;
+
+    return $self->process_rsd($file)
+}
 
 
 
@@ -263,7 +349,7 @@ sub getPostCategories {
     my $result= $som->result();
 
     unless ( defined $result ) {
-        $errstr = $som->faultring();
+        $errstr = $som->faultstring();
         $errcode= $som->faultcode();
         return undef
     }
@@ -282,7 +368,7 @@ sub setPostCategories {
     unless ( @$cats && $postid ) {
         croak "setPostCategories() usage error"
     }
-
+    
     my $blogid = $self->blogId()    or croak "no 'blogId' set";
 
     my $category_list = $self->getCategoryList($blogid);
@@ -353,7 +439,7 @@ sub publishPost {
     my $result= $som->result();
 
     unless ( defined $result ) {
-        $errstr = $som->faultsring;
+        $errstr = $som->faultstring;
         $errcode= $som->faultcode;
         return undef
     }
@@ -441,6 +527,65 @@ sub deletePost {
 
 
 
+*upload = \&newMediaObject;
+sub newMediaObject {
+    my ($self, $filename, $name, $type) = @_;
+    
+    my $blogid   = $self->blogId()   or croak "'blogId' is missing";
+    my $username = $self->username() or croak "'username' is not set";
+    my $password = $self->password() or croak "'password' is not set";
+
+    unless ( $filename ) {
+        croak "newMediaObject() usage error";
+    }
+
+    my $blob = undef;
+    if ( ref $filename ) {
+        $blob = $filename;
+        $filename = undef;
+      
+    } else {
+        unless(open(FH, $filename)) {
+            $errstr = "couldn't open $filename: $!";
+            return undef
+        }
+        local $/ = undef;
+        $blob = <FH>; close(FH);
+    }
+
+    if ( $filename && !$name ) {
+        require File::Basename;
+        $name = File::Basename::basename($filename);
+    }
+
+    unless ( $name ) {
+        croak "newMediaObject() usage error: \$name is missing"
+    }
+
+    my %content_hash = (
+         bits    => XMLRPC::Data->type(base64 => $blob),
+         name    => $name,
+         type    => $type || ""
+    );
+
+    my $proxy = $self->{_proxy};
+    my $som   = $proxy->call('metaWeblog.newMediaObject', 
+                    $blogid,    $username, 
+                    $password,  \%content_hash );
+    my $result = $som->result();
+
+    unless ( defined $result ) {
+        $errstr = $som->faultstring;
+        $errcode= $som->faultcode;
+        return undef;
+    }
+    return $result
+}
+
+
+
+
+
 
 
 
@@ -453,6 +598,13 @@ sub dump {
   my $d = new Data::Dumper([$self], [ref $self]);
   return $d->Dump();
 }
+
+
+
+package MovableType;
+
+@MovableType::ISA = ('Net::MovableType');
+
 
 
 
@@ -488,7 +640,7 @@ and users blogs, and perform most of the features you can perform through access
 MovableType account.
 
 Since I<Net::MovableType> uses MT's I<remote procedure call> gateway, you can do it from
-any computer with an interface connection.
+any computer with an Internet connection.
 
 =head1 PROGRAMMING INTERFACE
 
@@ -502,11 +654,26 @@ Before you start doing anything, you need to have a I<MovableType> object handy.
 create a I<MovableType> object by calling C<new()> - constructor method:
 
     $mt = new MovableType('http://mt.handalak.com/cgi-bin/mt-xmlrpc.cgi');
+    # or
+    $mt = new MovableType('http://author.handalak.com/rsd.xml');
+    # or even..
+    $mt = new MovableType('/home/sherzodr/public_html/author/rsd.xml');
 
 Notice, you need to pass at least one argument while creating I<MT> object, that is
-the location of your "mt-xmlrpc.cgi". It is very important that you get this one right.
-Otherwise, I<Net::MovableType> will know neither about where your web sites are, and how to
-access them.
+the location of your either F<mt-xmlrpc.cgi> file, or your web site's F<rsd.xml> file.
+Default templates of I<MT> already generate F<rsd.xml> file for you. If they don't,
+you should get one from http://www.movabletype.org/
+
+If your F<rsd.xml> file is available locally, you should provide a full path to the
+file instead of providing it as a URL. Reading the file locally is more efficient
+than fetching it over the Web.
+
+Giving it a location of your F<rsd.xml> file is preferred, since it will ensure that
+your C<blogId()> will be set properly. Otherwise, you will have to do it manually calling
+C<blogId()> (see later).
+
+It is very important that you get this one right. Otherwise, I<Net::MovableType> will 
+know neither about where your web site is nor how to access them.
 
 I<MovableType> requires you to provide valid username/password pair to do most of the things.
 So you need to tell I<MovableType> object about your username and passwords, so it can use
@@ -524,14 +691,16 @@ I<MT> object, or by calling C<username()> and C<password()> methods after creati
     $mt->username('author');
     $mt->password('password');
 
-
 C<username()> and C<password()> methods are used for both setting username and password,
 as well as for retrieving username and password for the current logged in. Just don't pass
 it any arguments should you wish to use for the latter purpose.
 
 =head2 DEFINING A BLOG ID
 
-As we will see in subsequent sections, some of the I<MovableType>'s methods operate on
+Defining a blog id may not be necessary if you generated your I<Net::MovableType> object
+with an F<rsd.xml> file. Otherwise, read on.
+
+As we will see in subsequent sections, most of the I<MovableType>'s methods operate on
 specific web log. For defining a default web log to operate on, after setting above I<username>
 and I<password>, you can also set your default blog id using C<blogId()> method:
 
@@ -558,7 +727,7 @@ by calling C<getUsersBlogs()> method:
 
     $blogs = $mt->getUsersBlogs();
 
-C<getUsersBlogs()> returns list of blogs, where each blog is represented as a hashref. Each hashref
+C<getUsersBlogs()> returns list of blogs, where each blog is represented with a hashref. Each hashref
 holds such information as I<blogid>, I<blogName> and I<url>. Following example lists all the
 blogs belonging to the current logged in user:
 
@@ -745,18 +914,58 @@ ensures that your pages pertaining to the deleted entry are rebuilt:
 
     $mt->deletePost(122, 1); # <-- delet post 122, and rebuilt the web site
 
-=head2 ERROR HANDLING
 
-If you noticed, we didn't even try to check if eny of our remote procedure calls
+=head2 UPLOADING 
+
+With I<Net::MovableType>, you can also upload files to your web site. Most common
+use of this feature is to associate an image, or some other downloadable file with
+your entries.
+
+I<Net::MovableType> provides C<upload()> method, which given a file contents,
+uploads it to your web site's F<archives> folder. On success, returns the URL of
+the newly uploaded file.
+
+C<upload()> method accepts either a full path to your file, or a reference to its
+contents. Second argument to upload() should be the file's name. If you already provided
+file's full path as the first argument, I<Net::MovableType> resolves the name of the file
+automatically, if it's missing.
+
+If you passed the contents of the file as the first argument, you are required to provide
+the name of the file explicitly.
+
+Consider the following code, which uploads a F<logo.gif> file to your web site:
+
+    $url = $mt->upload('D:\images\logo.gif');
+
+Following example uploads the same file, but saves it as "my-log.gif", instead of
+"logo.gif":
+
+    
+    $url = $mt->upload('D:\images\logo.gif', 'my-logo.gif');
+    
+
+Following example downloads a file from some remote location, using LWP::Simple,
+and uploads it to your web site with name "image.jpeg":
+
+
+    use LWP::Simple;
+
+    $content = get('http://some.dot.com/image.jpeg');
+    $url = $mt->upload( \$content, 'image.jpeg' )
+
+
+=head1 ERROR HANDLING
+
+If you noticed, we didn't even try to check if any of our remote procedure calls
 succeeded. This is to keep the examples as clean as possible.
 
-For examlpe, consider the following call:
+For example, consider the following call:
 
     $new_id = $mt->newPost($entry, 1);
 
-There is no guaranteed that the above entry will be posted, or published.
+There is no guarantee that the above entry is posted, nor published.
 You username/password might be wrong, or you made a mistake while defining your
-I<mt-xmlrpc> gateway? You may never know untill its too late.
+I<mt-xmlrpc> gateway? You may never know until its too late.
 
 That's why you should always check the return value of the methods that make a remote
 procedure call.
@@ -770,13 +979,38 @@ message (not always as useful) can be retrieved through C<errcode()> static clas
         die $mt->errstr
     }
 
-or:
+or just:
 
     $new_id = $mt->newPost($entry, 1) or die $mt->errstr;
+
+
+If you are creating your I<MovableType> object with an F<rsd.xml> file, you should also
+check the return value of C<new()>:
+
+    $mt = new Net::MovableType($rsd_url);
+    unless ( defined $mt ) {
+        die "couldn't create MT object with $rsd_url: " . Net::MovableType->errstr
+    }
 
 =head1 TODO
 
 Should implement a caching mechanism
+
+Manual is still not complete, more methods are left to be documented properly
+
+
+=head1 CREDITS
+
+Following people have contributed to the library with their suggestions and patches.
+The list may not be complete. Please help me with it.
+
+=over 4
+
+=item Atsushi Sano
+
+For F<rsd.xml> and C<newMediaObject()> support.
+
+=back
 
 =head1 COPYRIGHT
 

@@ -24,7 +24,7 @@ DESCRIPTION
     features you can perform through accessing your MovableType account.
 
     Since *Net::MovableType* uses MT's *remote procedure call* gateway, you
-    can do it from any computer with an interface connection.
+    can do it from any computer with an Internet connection.
 
 PROGRAMMING INTERFACE
     *Net::MovableType* promises an intuitive, user friendly, Object Oriented
@@ -39,12 +39,28 @@ PROGRAMMING INTERFACE
     constructor method:
 
         $mt = new MovableType('http://mt.handalak.com/cgi-bin/mt-xmlrpc.cgi');
+        # or
+        $mt = new MovableType('http://author.handalak.com/rsd.xml');
+        # or even..
+        $mt = new MovableType('/home/sherzodr/public_html/author/rsd.xml');
 
     Notice, you need to pass at least one argument while creating *MT*
-    object, that is the location of your "mt-xmlrpc.cgi". It is very
-    important that you get this one right. Otherwise, *Net::MovableType*
-    will know neither about where your web sites are, and how to access
-    them.
+    object, that is the location of your either mt-xmlrpc.cgi file, or your
+    web site's rsd.xml file. Default templates of *MT* already generate
+    rsd.xml file for you. If they don't, you should get one from
+    http://www.movabletype.org/
+
+    If your rsd.xml file is available locally, you should provide a full
+    path to the file instead of providing it as a URL. Reading the file
+    locally is more efficient than fetching it over the Web.
+
+    Giving it a location of your rsd.xml file is preferred, since it will
+    ensure that your "blogId()" will be set properly. Otherwise, you will
+    have to do it manually calling "blogId()" (see later).
+
+    It is very important that you get this one right. Otherwise,
+    *Net::MovableType* will know neither about where your web site is nor
+    how to access them.
 
     *MovableType* requires you to provide valid username/password pair to do
     most of the things. So you need to tell *MovableType* object about your
@@ -70,7 +86,10 @@ PROGRAMMING INTERFACE
 
   DEFINING A BLOG ID
 
-    As we will see in subsequent sections, some of the *MovableType*'s
+    Defining a blog id may not be necessary if you generated your
+    *Net::MovableType* object with an rsd.xml file. Otherwise, read on.
+
+    As we will see in subsequent sections, most of the *MovableType*'s
     methods operate on specific web log. For defining a default web log to
     operate on, after setting above *username* and *password*, you can also
     set your default blog id using "blogId()" method:
@@ -101,7 +120,7 @@ PROGRAMMING INTERFACE
         $blogs = $mt->getUsersBlogs();
 
     "getUsersBlogs()" returns list of blogs, where each blog is represented
-    as a hashref. Each hashref holds such information as *blogid*,
+    with a hashref. Each hashref holds such information as *blogid*,
     *blogName* and *url*. Following example lists all the blogs belonging to
     the current logged in user:
 
@@ -295,20 +314,55 @@ PROGRAMMING INTERFACE
 
         $mt->deletePost(122, 1); # <-- delet post 122, and rebuilt the web site
 
-  ERROR HANDLING
+  UPLOADING
 
-    If you noticed, we didn't even try to check if eny of our remote
+    With *Net::MovableType*, you can also upload files to your web site.
+    Most common use of this feature is to associate an image, or some other
+    downloadable file with your entries.
+
+    *Net::MovableType* provides "upload()" method, which given a file
+    contents, uploads it to your web site's archives folder. On success,
+    returns the URL of the newly uploaded file.
+
+    "upload()" method accepts either a full path to your file, or a
+    reference to its contents. Second argument to upload() should be the
+    file's name. If you already provided file's full path as the first
+    argument, *Net::MovableType* resolves the name of the file
+    automatically, if it's missing.
+
+    If you passed the contents of the file as the first argument, you are
+    required to provide the name of the file explicitly.
+
+    Consider the following code, which uploads a logo.gif file to your web
+    site:
+
+        $url = $mt->upload('D:\images\logo.gif');
+
+    Following example uploads the same file, but saves it as "my-log.gif",
+    instead of "logo.gif":
+
+        $url = $mt->upload('D:\images\logo.gif', 'my-logo.gif');
+    
+    Following example downloads a file from some remote location, using
+    LWP::Simple, and uploads it to your web site with name "image.jpeg":
+
+        use LWP::Simple;
+
+        $content = get('http://some.dot.com/image.jpeg');
+        $url = $mt->upload( \$content, 'image.jpeg' )
+
+ERROR HANDLING
+    If you noticed, we didn't even try to check if any of our remote
     procedure calls succeeded. This is to keep the examples as clean as
     possible.
 
-    For examlpe, consider the following call:
+    For example, consider the following call:
 
         $new_id = $mt->newPost($entry, 1);
 
-    There is no guaranteed that the above entry will be posted, or
-    published. You username/password might be wrong, or you made a mistake
-    while defining your *mt-xmlrpc* gateway? You may never know untill its
-    too late.
+    There is no guarantee that the above entry is posted, nor published. You
+    username/password might be wrong, or you made a mistake while defining
+    your *mt-xmlrpc* gateway? You may never know until its too late.
 
     That's why you should always check the return value of the methods that
     make a remote procedure call.
@@ -323,17 +377,34 @@ PROGRAMMING INTERFACE
             die $mt->errstr
         }
 
-    or:
+    or just:
 
         $new_id = $mt->newPost($entry, 1) or die $mt->errstr;
+
+    If you are creating your *MovableType* object with an rsd.xml file, you
+    should also check the return value of "new()":
+
+        $mt = new Net::MovableType($rsd_url);
+        unless ( defined $mt ) {
+            die "couldn't create MT object with $rsd_url: " . Net::MovableType->errstr
+        }
 
 TODO
     Should implement a caching mechanism
 
-AUTHOR
-    Sherzod B. Ruzmetov <sherzodr@handalak.com>
+    Manual is still not complete, more methods are left to be documented
+    properly
 
-    <URI: http://author.handalak.com/ >
+COPYRIGHT
+    Copyright (C) 2003, Sherzod B. Ruzmetov. All rights reserved.
+
+    This library is a free software, and can be modified and distributed
+    under the same terms as Perl itself.
+
+AUTHOR
+    Sherzod Ruzmetov <sherzodr AT cpan.org>
+
+    http://author.handalak.com/
 
 SEE ALSO
     the Net::Blogger manpage

@@ -1,6 +1,7 @@
 Revision history for Perl extension Net::MovableType.
 
-0.01  Sat Jul 19 22:21:20 2003
-	- original version; created by h2xs 1.21 with options
-		-AX -n Net::MovableType
+1.72	Mon Jul 28
+	- added support for newMediaObject (upload()) method.
+	- added support for reading parameters from rsd.xml file
+
 
