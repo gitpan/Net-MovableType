@@ -1,13 +1,13 @@
 package Net::MovableType;
 
-# $Id: MovableType.pm,v 1.11 2003/07/28 11:30:10 sherzodr Exp $
+# MovableType.pm,v 1.18 2004/08/14 08:31:32 sherzodr Exp
 
 use strict;
 use vars qw($VERSION $errstr $errcode);
 use Carp;
 use XMLRPC::Lite;
 
-$VERSION = '1.73';
+$VERSION = '1.74';
 
 # Preloaded methods go here.
 
@@ -18,12 +18,12 @@ sub new {
   my ($url, $username, $password) = @_;
 
   my $self = {
-    _proxy   => undef,
+    proxy   => undef,
     blogid   => undef,
     username => $username,
     password => $password
   };
-  
+
   bless $self, $class;
 
   # if $url starts with 'http://' and ends in '.xml', we assume it was a
@@ -34,14 +34,14 @@ sub new {
   # if the URL just starts with 'http://', we assume it was a url for
   # MT's XML-RPC server
   } elsif ( $url =~ m/^http:\/\// ) {
-      $self->{_proxy} = XMLRPC::Lite->proxy($url);
+      $self->{proxy} = XMLRPC::Lite->proxy($url);
 
   # in neither case, we assume it was a file system location of rsd.xml file
   } elsif ( $url ) {
       $self->rsd_file($url) or return undef;
-  
+
   }
-  
+
   return $self
 }
 
@@ -49,15 +49,16 @@ sub new {
 
 
 
-# shortcut for XMLRPC::SOM's call() method. Private!
-sub _call {
+# shortcut for XMLRPC::Lite's call() method. Main difference from original call()
+# is, it returns native Perl data, instead of XMLRPC::SOM object
+sub call {
     my ($self, $method, @args) = @_;
 
     unless ( $method ) {
-        die "_call(): usage error"
+        die "call(): usage error"
     }
 
-    my $proxy = $self->{_proxy} or die "'_proxy' is missing";
+    my $proxy = $self->{proxy} or die "'proxy' is missing";
     my $som   = $proxy->call($method, @args);
     my $result= $som->result();
 
@@ -66,7 +67,7 @@ sub _call {
         $errcode= $som->faultcode;
         return undef
     }
-    
+
     return $result
 }
 
@@ -90,7 +91,7 @@ sub process_rsd {
     }
 
     $self->blogId($blogid);
-    $self->{_proxy} = XMLRPC::Lite->proxy($apilink);
+    $self->{proxy} = XMLRPC::Lite->proxy($apilink);
 
     # need to return a true value indicating success
     return 1
@@ -114,7 +115,7 @@ sub rsd_url {
     my $req= HTTP::Request->new('GET', $url);
     my $response = $ua->request($req);
     if ( $response->is_error ) {
-        $errstr = $response->message;
+        $errstr = $response->base . ": " . $response->message;
         $errcode= $response->code;
         return undef
     }
@@ -140,19 +141,19 @@ sub rsd_file {
 
 
 sub username {
-  my ($self, $username) = @_;
+    my ($self, $username) = @_;
 
-  if ( defined $username ) {
-    $self->{username} = $username;
-  }
-  return $self->{username}
+    if ( defined $username ) {
+        $self->{username} = $username;
+    }
+    return $self->{username}
 }
 
 
 
 *error = \&errstr;
 sub errstr {
-  return $errstr
+    return $errstr
 }
 
 
@@ -170,6 +171,17 @@ sub password {
     $self->{password} = $password
   }
   return $self->{password}
+}
+
+
+
+sub proxy {
+    my ($self, $proxy) = @_;
+
+    if ( defined $proxy ) {
+        $self->{proxy} = $proxy
+    }
+    return $self->{proxy}
 }
 
 
@@ -207,6 +219,28 @@ sub resolveBlogId {
 
 
 
+sub getBlogInfo {
+    my ($self, $blogid) = @_;
+
+    $blogid ||= $self->blogId() or croak "no 'blogId' set";
+    my $blogs = $self->getUsersBlogs() or return undef;
+
+    while ( my $b = shift @$blogs ) {
+        if ( $b->{blogid} == $blogid ) {
+            return $b
+        }
+    }
+
+    $errstr = "No blog found with id '$blogid";
+    return undef
+}
+
+
+
+
+
+
+
 *getBlogs = \&getUsersBlogs;
 sub getUsersBlogs {
     my ($self, $username, $password)  = @_;
@@ -218,7 +252,7 @@ sub getUsersBlogs {
         croak "username and password are missing";
     }
 
-    return $self->_call('blogger.getUsersBlogs', "", $username, $password)
+    return $self->call('blogger.getUsersBlogs', "", $username, $password)
 }
 
 
@@ -236,7 +270,7 @@ sub getUserInfo {
         croak "username and/or password are missing"
     }
 
-    return $self->_call('blogger.getUserInfo', "", $username, $password)
+    return $self->call('blogger.getUserInfo', "", $username, $password)
 }
 
 
@@ -252,7 +286,7 @@ sub getPost {
         croak "getPost() usage error"
     }
 
-    return $self->_call('metaWeblog.getPost', $postid, $username, $password)
+    return $self->call('metaWeblog.getPost', $postid, $username, $password)
 }
 
 
@@ -269,7 +303,7 @@ sub getRecentPosts {
     my $password = $self->password()   or croak "no 'password' defined";
     $numposts ||= 1;
 
-    return $self->_call('metaWeblog.getRecentPosts', $blogid, $username, $password, $numposts)
+    return $self->call('metaWeblog.getRecentPosts', $blogid, $username, $password, $numposts)
 }
 
 
@@ -282,7 +316,7 @@ sub getRecentPostTitles {
     my $password= $self->password()     or croak "no 'password' defined";
     $numposts ||= 1;
 
-    return $self->_call('mt.getRecentPostTitles', $blogid, $username, $password, $numposts)
+    return $self->call('mt.getRecentPostTitles', $blogid, $username, $password, $numposts)
 }
 
 
@@ -298,7 +332,7 @@ sub getCategoryList {
     $username   = $self->username($username) or croak "no 'username' defined";
     $password   = $self->password($password) or croak "no 'password' defined";
 
-    return $self->_call('mt.getCategoryList', $blogid, $username, $password)
+    return $self->call('mt.getCategoryList', $blogid, $username, $password)
 }
 
 
@@ -314,7 +348,7 @@ sub getPostCategories {
         croak "getPostCategories() usage error"
     }
 
-    return $self->_call('mt.getPostCategories', $postid, $username, $password)
+    return $self->call('mt.getPostCategories', $postid, $username, $password)
 }
 
 
@@ -329,7 +363,7 @@ sub setPostCategories {
     unless ( @$cats && $postid ) {
         croak "setPostCategories() usage error"
     }
-    
+
     my $blogid = $self->blogId()    or croak "no 'blogId' set";
 
     my $category_list = $self->getCategoryList($blogid);
@@ -346,7 +380,7 @@ sub setPostCategories {
     my $password  = $self->password() or croak "no 'password' defined";
     $postid                          or croak "setPostCategories() usage error";
 
-    return $self->_call('mt.setPostCategories', $postid, $username, $password, $post_categories)
+    return $self->call('mt.setPostCategories', $postid, $username, $password, $post_categories)
 }
 
 
@@ -362,7 +396,7 @@ sub setPostCategories {
 sub supportedMethods {
     my ($self) = @_;
 
-    return $self->_call('mt.supportedMethods')
+    return $self->call('mt.supportedMethods')
 }
 
 
@@ -377,7 +411,7 @@ sub publishPost {
         croak "publishPost() usage error"
     }
 
-    return $self->_call('mt.publishPost', $postid, $username, $password)
+    return $self->call('mt.publishPost', $postid, $username, $password)
 }
 
 
@@ -395,7 +429,7 @@ sub newPost {
         croak "newPost() usage error"
     }
 
-    return $self->_call('metaWeblog.newPost', $blogid, $username, $password, $content, $publish)
+    return $self->call('metaWeblog.newPost', $blogid, $username, $password, $content, $publish)
 }
 
 
@@ -413,16 +447,7 @@ sub editPost {
         croak "newPost() usage error"
     }
 
-    my $proxy = $self->{_proxy};
-    my $som   = $proxy->call('metaWeblog.editPost', $postid, $username, $password, $content, $publish);
-    my $result = $som->result();
-
-    unless ( defined $result ) {
-        $errstr = $som->faultstring;
-        $errcode= $som->faultcode;
-        return undef
-    }
-    return $result
+    return $self->call('metaWeblog.editPost', $postid, $username, $password, $content, $publish)
 }
 
 
@@ -437,7 +462,7 @@ sub deletePost {
     my $password = $self->password or croak "'password' not set";
     $postid                        or croak "deletePost() usage error";
 
-    return $self->_call('blogger.deletePost', "", $postid, $username, $password, $publish)
+    return $self->call('blogger.deletePost', "", $postid, $username, $password, $publish)
 }
 
 
@@ -446,7 +471,7 @@ sub deletePost {
 *upload = \&newMediaObject;
 sub newMediaObject {
     my ($self, $filename, $name, $type) = @_;
-    
+
     my $blogid   = $self->blogId()   or croak "'blogId' is missing";
     my $username = $self->username() or croak "'username' is not set";
     my $password = $self->password() or croak "'password' is not set";
@@ -457,9 +482,9 @@ sub newMediaObject {
 
     my $blob = undef;
     if ( ref $filename ) {
-        $blob = $filename;
+        $blob = $$filename;
         $filename = undef;
-      
+
     } else {
         unless(open(FH, $filename)) {
             $errstr = "couldn't open $filename: $!";
@@ -484,7 +509,7 @@ sub newMediaObject {
          type    => $type || ""
     );
 
-    return $self->_call('metaWeblog.newMediaObject', $blogid, $username, $password, \%content_hash)
+    return $self->call('metaWeblog.newMediaObject', $blogid, $username, $password, \%content_hash)
 }
 
 
@@ -507,7 +532,6 @@ sub dump {
 
 
 package MovableType;
-
 @MovableType::ISA = ('Net::MovableType');
 
 
@@ -526,10 +550,9 @@ Net::MovableType - light-weight MovableType client
 =head1 SYNOPSIS
 
   use Net::MovableType;
-  my $mt = new Net::MovableType('http://mt.handalak.com/cgi-bin/xmlrpc');
+  my $mt = new Net::MovableType('http://your.com/rsd.xml');
   $mt->username('user');
   $mt->password('secret');
-  $mt->blogId(1);
 
   my $entries = $mt->getRecentPosts(5);
   while ( my $entry = shift @$entries ) {
@@ -543,14 +566,14 @@ Using I<Net::MovableType> you can post new entries, edit existing entries, brows
 and users blogs, and perform most of the features you can perform through accessing your
 MovableType account.
 
-Since I<Net::MovableType> uses MT's I<remote procedure call> gateway, you can do it from
+Since I<Net::MovableType> uses MT's XML-RPC (I<Remote Procedure Call> gateway, you can do it from
 any computer with Internet connection.
 
-=head1 PROGRAMMING INTERFACE
+=head1 PROGRAMMING STYLE
 
 I<Net::MovableType> promises an intuitive, user friendly, Object Oriented interface for managing
 your web sites published through MovableType. Most of the method names correspond to those documented
-in MovableType's Programming Interface Manual.
+in MovableType's Programming Interface Manual, however, their expected arguments differ.
 
 =head2 CREATING MT OBJECT
 
@@ -576,18 +599,19 @@ Giving it a location of your F<rsd.xml> file is preferred, since it will ensure 
 your C<blogId()> will be set properly. Otherwise, you will have to do it manually calling
 C<blogId()> (see later).
 
-It is very important that you get this one right. Otherwise, I<Net::MovableType> will 
+It is very important that you get this one right. Otherwise, I<Net::MovableType> will
 know neither about where your web site is nor how to access them.
 
 I<MovableType> requires you to provide valid username/password pair to do most of the things.
 So you need to tell I<MovableType> object about your username and passwords, so it can use
 them to access the resources.
 
+=head2 LOGGING IN
+
 You can login in two ways; by either providing your I<username> and I<password> while creating
 I<MT> object, or by calling C<username()> and C<password()> methods after creating I<MT> object:
 
     # creating MT object with valid username/password:
-    $proxy = 'http://mt.handalak.com/cgi-bin/mt-xmlrpc.cgi';
     $mt = new MovableType($proxy, 'author', 'password');
 
     # or
@@ -596,12 +620,12 @@ I<MT> object, or by calling C<username()> and C<password()> methods after creati
     $mt->password('password');
 
 C<username()> and C<password()> methods are used for both setting username and password,
-as well as for retrieving username and password for the current logged in. Just don't pass
+as well as for retrieving username and password for the current user. Just don't pass
 it any arguments should you wish to use for the latter purpose.
 
 =head2 DEFINING A BLOG ID
 
-Defining a blog id may not be necessary if you generated your I<Net::MovableType> object
+Defining a blog id may not be necessary if you generated your C<$mt> object
 with an F<rsd.xml> file. Otherwise, read on.
 
 As we will see in subsequent sections, most of the I<MovableType>'s methods operate on
@@ -610,7 +634,7 @@ and I<password>, you can also set your default blog id using C<blogId()> method:
 
     $mt->blogId(1);
 
-To be able to do that, you first need to know your blog id. There are no documented ways of
+To be able to do this, you first need to know your blog id. There are no documented ways of
 retrieving your blog id, except for investigating the URL of your MovableType account panel.
 Just login to your MovableType control panel (through F<mt.cgi> script). In the first screen,
 you should see a list of your web logs. Click on the web log in question, and look at the
@@ -633,7 +657,7 @@ by calling C<getUsersBlogs()> method:
 
 C<getUsersBlogs()> returns list of blogs, where each blog is represented with a hashref. Each hashref
 holds such information as I<blogid>, I<blogName> and I<url>. Following example lists all the
-blogs belonging to the current logged in user:
+blogs belonging to the current user:
 
     $blogs = $mt->getUsersBlogs();
     for $b ( @$blogs ) {
@@ -642,7 +666,7 @@ blogs belonging to the current logged in user:
 
 =head2 POSTING NEW ENTRY
 
-By now, you know how to login and how to define your blog_id. Now is a good time to post
+By now, you know how to login and how to define your blogId. Now is a good time to post
 a new article to your web log. That's what  C<newPost()> method is for.
 
 C<newPost()> expects at least a single argument, which should be a reference to a hash
@@ -819,7 +843,7 @@ ensures that your pages pertaining to the deleted entry are rebuilt:
     $mt->deletePost(122, 1); # <-- delet post 122, and rebuilt the web site
 
 
-=head2 UPLOADING 
+=head2 UPLOADING
 
 With I<Net::MovableType>, you can also upload files to your web site. Most common
 use of this feature is to associate an image, or some other downloadable file with
@@ -844,9 +868,9 @@ Consider the following code, which uploads a F<logo.gif> file to your web site:
 Following example uploads the same file, but saves it as "my-log.gif", instead of
 "logo.gif":
 
-    
+
     $url = $mt->upload('D:\images\logo.gif', 'my-logo.gif');
-    
+
 
 Following example downloads a file from some remote location, using LWP::Simple,
 and uploads it to your web site with name "image.jpeg":
@@ -895,6 +919,22 @@ check the return value of C<new()>:
     unless ( defined $mt ) {
         die "couldn't create MT object with $rsd_url: " . Net::MovableType->errstr
     }
+
+
+=head1 OTHER METHODS
+
+comming soon...
+
+=head1 TEST BLOG
+
+I opened a public test blog at http://net-mt.handalak.com/. Initial purpose of this
+blog was to provide a working weblog for Net::MovableType's tests to operate on. Currently
+its open to the World.
+
+Credentials needed for accessing this weblog through Net::MovableType are:
+
+    Username: net-mt
+    Password: secret
 
 =head1 TODO
 
